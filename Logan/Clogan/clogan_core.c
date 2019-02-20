@@ -36,7 +36,7 @@
 static int is_init_ok = 0;
 static int is_open_ok = 0;
 
-static unsigned char *_logan_buffer = NULL; //缓存Buffer (不释放)
+static unsigned char *_logan_buffer = NULL; //缓存Buffer (不释放) //mmap内存映射的内存地址指针，指向mmap文件内存映射。如果mmap失败则会指向一块内存缓存的地址
 
 static char *_dir_path = NULL; //目录路径 (不释放)
 
@@ -44,11 +44,11 @@ static char *_mmap_file_path = NULL; //mmap文件路径 (不释放)
 
 static int buffer_length = 0; //缓存区域的大小
 
-static unsigned char *_cache_buffer_buffer = NULL; //临时缓存文件 (不释放)
+static unsigned char *_cache_buffer_buffer = NULL; //临时缓存文件 (不释放) //纯内存缓存，不涉及mmap，最大大小为150kb
 
 static int buffer_type; //缓存区块的类型
 
-static long max_file_len = LOGAN_LOGFILE_MAXLENGTH;
+static long max_file_len = LOGAN_LOGFILE_MAXLENGTH; //日志文件缓存大小默认10mb
 
 static cLogan_model *logan_model = NULL; //(不释放)
 
@@ -174,7 +174,7 @@ void read_mmap_data_clogan(const char *path_dirs) {
 /**
  * Logan初始化
  * @param cachedirs 缓存路径
- * @param pathdirs  目录路径
+ * @param pathdirs  日志文件目录路径
  * @param max_file  日志文件最大值
  */
 int
@@ -216,7 +216,7 @@ clogan_init(const char *cache_dirs, const char *path_dirs, int max_file, const c
     if (d != '/') {
         isAddDivede = 1;
     }
-
+	//计算mmap文件路径的长度
     size_t total = path1 + (isAddDivede ? path4 : 0) + path2 + path4 + path3 + 1;
     char *cache_path = malloc(total);
     if (NULL != cache_path) {
@@ -304,6 +304,7 @@ clogan_init(const char *cache_dirs, const char *path_dirs, int max_file, const c
             }
         }
         if (flag == LOGAN_MMAP_MMAP) //MMAP的缓存模式,从缓存的MMAP中读取数据
+            //mmap文件刚刚映射好，里面都是用空数据填充的为什么还要取读一次？
             read_mmap_data_clogan(_dir_path);
         printf_clogan("clogan_init > logan init success\n");
     } else {

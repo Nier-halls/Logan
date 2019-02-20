@@ -59,8 +59,8 @@ public class MainActivity extends Activity {
 
     private void initData() {
         LoganConfig config = new LoganConfig.Builder()
-                .setCachePath(getApplicationContext().getFilesDir().getAbsolutePath())
-                .setPath(getApplicationContext().getExternalFilesDir(null).getAbsolutePath()
+                .setCachePath(getApplicationContext().getFilesDir().getAbsolutePath())// /data/user/0/test.logan.dianping.com.logan/files
+                .setPath(getApplicationContext().getExternalFilesDir(null).getAbsolutePath()// /storage/emulated/0/Android/data/test.logan.dianping.com.logan/files
                         + File.separator + FILE_NAME)
                 .setEncryptKey16("0123456789012345".getBytes())
                 .setEncryptIV16("0123456789012345".getBytes())

@@ -1,3 +1,31 @@
 2019-02-18 19:35:43
 1.loadLibrary为什么要用Runntime的library，和System.loadLibrary有什么区别吗?
-2.
+2.JNI方法中jobject对象代表的是什么?
+3.CMakeList的基本语法? c代码是怎么实现互相依赖的? 也没有看到有inClude代码的地方?
+4.JNI方法的前缀为什么会有一个符号"1"
+5.mmap的简单用法?
+
+2019-02-20 10:11:24
+1.logan_init中有没有涉及到mmap相关的配置，mmap配置需要做一些什么
+2.Linux中用户群组的概念是什么？普通app代表的用户属于什么群组？
+3.Linux中文件描述符到底是什么？
+
+
+1.c(c++)中'*'代表取一个地址指向的值，一般*p=&x
+2.'*'指针类型的引用值永远是一个地址，之所以声明指针的类型是方便*运算符直接取值。指针可以理解为一个特殊的变量，存的是地址，却拥有根据地址获取值的能力。
+3.c(c++)中'&'代表取一个引用的地址, int i=10, &i 取存10整形的地址
+4.NULL代码void*类型(类似于Object类型的指针)的引用，地址值为0,也就是((void*)0)
+5.memset(cache_path, 0, total); memset初始化内存地址，给初始地址为cache_path的地址便宜到total为止都置为0
+6.memcpy(KEY, key, 16); memcpy，拷贝指定内存长度，从key拷贝到KEY中
+7.				/**
+				 * mmap参数 
+				 *
+				 * addr mmap内存映射到的地址，如果传NULL由内核自己决定映射到哪里
+				 * length 需要映射的文件长度
+				 * prot mapping映射的权限
+				 * flags 映射后更新会同时生效到文件显示在别的进程中的映射
+				 * fd 需要mmap的文件描述符
+				 * offset 映射的偏移量
+				 */
+                p_map = (unsigned char *) mmap(0, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+

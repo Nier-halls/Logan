@@ -26,7 +26,13 @@
 #include "mmap_util.h"
 #include <errno.h>
 
-//创建MMAP缓存buffer或者内存buffer
+/*
+ * 创建MMAP缓存buffer或者内存buffer
+ *  
+ *  _filepath  缓存地址，在/data/user/0/test.logan.dianping.com.logan/files/logan_cache
+ *  buffer     对应外部的_logan_buffer指针地址, 也就是mmap内存映射的地址,具体映射的文件就是上面_filepath处的logan.mmap2
+ *  cache      对应外部的_cache_buffer_buffer指针地址
+*/
 int open_mmap_file_clogan(char *_filepath, unsigned char **buffer, unsigned char **cache) {
     int back = LOGAN_MMAP_FAIL;
     if (NULL == _filepath || 0 == strnlen(_filepath, 128)) {
@@ -34,21 +40,23 @@ int open_mmap_file_clogan(char *_filepath, unsigned char **buffer, unsigned char
     } else {
         unsigned char *p_map = NULL;
         int size = LOGAN_MMAP_LENGTH;
+		//O_RDWR | O_CREAT 读写模式打开或者创建文件
+		//S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP 代表用户读写以及用户群组的读写权限
         int fd = open(_filepath, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP); //后两个添加权限
         int isNeedCheck = 0; //是否需要检查mmap缓存文件重新检查
         if (fd != -1) { //保护
             int isFileOk = 0;
             FILE *file = fopen(_filepath, "rb+"); //先判断文件是否有值，再mmap内存映射
             if (NULL != file) {
-                fseek(file, 0, SEEK_END);
-                long longBytes = ftell(file);
-                if (longBytes < LOGAN_MMAP_LENGTH) {
+                fseek(file, 0, SEEK_END);// fseek将文件指针移动到文件的末尾
+                long longBytes = ftell(file);// ftell获取当前文件的指针为止
+                if (longBytes < LOGAN_MMAP_LENGTH) { //检查文件是否大于150kb
                     fseek(file, 0, SEEK_SET);
                     char zero_data[size];
                     memset(zero_data, 0, size);
                     size_t _size = 0;
-                    _size = fwrite(zero_data, sizeof(char), size, file);
-                    fflush(file);
+                    _size = fwrite(zero_data, sizeof(char), size, file);//这里为什么要填充‘0’数据到文件中?
+                    fflush(file);//每次打开缓存文件都会把文件中的所有数据全部填充成0?有什么套路吗?
                     if (_size == size) {
                         printf_clogan("copy data 2 mmap file success\n");
                         isFileOk = 1;
@@ -64,6 +72,7 @@ int open_mmap_file_clogan(char *_filepath, unsigned char **buffer, unsigned char
                 isFileOk = 0;
             }
 
+			//这个加强保护是什么鬼?检查一下文件的长度?有没有超过150kb？
             if (isNeedCheck) { //加强保护，对映射的文件要有一个适合长度的文件
                 FILE *file = fopen(_filepath, "rb");
                 if (file != NULL) {
@@ -81,6 +90,16 @@ int open_mmap_file_clogan(char *_filepath, unsigned char **buffer, unsigned char
             }
 
             if (isFileOk) {
+				/**
+				 * mmap参数 
+				 *
+				 * addr mmap内存映射到的地址，如果传NULL由内核自己决定映射到哪里
+				 * length 需要映射的文件长度
+				 * prot mapping映射的权限
+				 * flags 映射后更新会同时生效到文件显示在别的进程中的映射
+				 * fd 需要mmap的文件描述符
+				 * offset 映射的偏移量
+				 */
                 p_map = (unsigned char *) mmap(0, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
             }
             if (p_map != MAP_FAILED && NULL != p_map && isFileOk) {
@@ -106,7 +125,7 @@ int open_mmap_file_clogan(char *_filepath, unsigned char **buffer, unsigned char
         }
     }
 
-    int size = LOGAN_MEMORY_LENGTH;
+    int size = LOGAN_MEMORY_LENGTH;//内存缓存的大小，也是150kb
     unsigned char *tempData = malloc(size);
     if (NULL != tempData) {
         memset(tempData, 0, size);
