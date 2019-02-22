@@ -62,11 +62,11 @@
 #define CLOGAN_VERSION_NUMBER 3 //Logan的版本号(2)版本
 
 typedef struct logan_model_struct {
-    int total_len; //数据长度
-    char *file_path; //文件路径
+    int total_len; //mmap文件中日志文件的数据长度
+    char *file_path; //日志的文件的路径，一般在外部storage目录下面
 
     int is_malloc_zlib;
-    z_stream *strm;
+    z_stream *strm; //压缩的时候 z_stream 的地址 
     int zlib_type; //压缩类型
     char remain_data[16]; //剩余空间
     int remain_data_len; //剩余空间长度
@@ -74,13 +74,13 @@ typedef struct logan_model_struct {
     int is_ready_gzip; //是否可以gzip
 
     int file_stream_type; //文件流类型
-    FILE *file; //文件流
+    FILE *file; //日志文件流
 
-    long file_len; //文件大小
+    long file_len; //日志文件当前的文件大小
 
     unsigned char *buffer_point; //缓存的指针 (不变)
     unsigned char *last_point; //最后写入位置的指针
-    unsigned char *total_point; //总数的指针 (可能变) , 给c看,低字节
+    unsigned char *total_point; //mmap中总数的指针 (可能变) , 给c看,低字节//为什么可能变？？？
     unsigned char *content_lent_point;//协议内容长度指针 , 给java看,高字节
     int content_len; //内容的大小
 

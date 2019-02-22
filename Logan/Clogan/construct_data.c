@@ -34,8 +34,16 @@ static const char *threadname_key = "n";
 static const char *threadid_key = "i";
 static const char *ismain_key = "m";
 
-Construct_Data_cLogan *
-construct_json_data_clogan(char *log, int flag, long long local_time, char *thread_name,
+/**
+ *
+ * log 			"clogan header" 协议头?
+ * flag 		1
+ * local_time   当前系统事件
+ * thread_name	"clogan"  
+ * thread_id	1   	
+ * is_main		1  
+ */
+Construct_Data_cLogan * construct_json_data_clogan(char *log, int flag, long long local_time, char *thread_name,
                            long long thread_id, int is_main) {
     Construct_Data_cLogan *construct_data = NULL;
     cJSON *root = NULL;
@@ -56,11 +64,11 @@ construct_json_data_clogan(char *log, int flag, long long local_time, char *thre
 
             if (NULL != construct_data) {
                 memset(construct_data, 0, sizeof(Construct_Data_cLogan));
-                size_t str_len = strlen(back_data);
-                size_t length = str_len + 1;
-                unsigned char *temp_data = (unsigned char *) malloc(length);
+                size_t str_len = strlen(back_data);// 头文件（json格式的）String字符串长度
+                size_t length = str_len + 1;// 头文件数据的长度，但是这里为什么要+1？ >>>>>>>  >>>添加\n字符
+                unsigned char *temp_data = (unsigned char *) malloc(length);// 为什么要重新申请一段内存，直接用back_data对应的地址不行吗？难道这段内存会在delete的时候被回收？
                 if (NULL != temp_data) {
-                    unsigned char *temp_point = temp_data;
+                    unsigned char *temp_point = temp_data;// 为什么要声明两个指针？直接用temp_data指针来进行copy JSON字符串不就好了。
                     memset(temp_point, 0, length);
                     memcpy(temp_point, back_data, str_len);
                     temp_point += str_len;

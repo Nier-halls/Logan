@@ -24,4 +24,4 @@ find_library( # Sets the name of the path variable.
 # build script, prebuilt third-party libraries, or system libraries.
 
 add_library(logan SHARED src/main/jni/clogan_protocol.c)
-target_link_libraries(logan ${log-lib} z clogan)
+target_link_libraries(logan ${log-lib} z clogan log)

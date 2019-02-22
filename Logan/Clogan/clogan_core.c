@@ -38,7 +38,7 @@ static int is_open_ok = 0;
 
 static unsigned char *_logan_buffer = NULL; //缓存Buffer (不释放) //mmap内存映射的内存地址指针，指向mmap文件内存映射。如果mmap失败则会指向一块内存缓存的地址
 
-static char *_dir_path = NULL; //目录路径 (不释放)
+static char *_dir_path = NULL; //日志目录路径 (不释放) 在外部存储./storage/Android
 
 static char *_mmap_file_path = NULL; //mmap文件路径 (不释放)
 
@@ -52,6 +52,9 @@ static long max_file_len = LOGAN_LOGFILE_MAXLENGTH; //日志文件缓存大小�
 
 static cLogan_model *logan_model = NULL; //(不释放)
 
+/**
+ * 打开日志文件的目录，并且记录当前日志文件的情况，已经写入的大小等
+ */
 int init_file_clogan(cLogan_model *logan_model) {
     int is_ok = 0;
     if (LOGAN_FILE_OPEN == logan_model->file_stream_type) {
@@ -111,6 +114,13 @@ void write_mmap_data_clogan(char *path, unsigned char *temp) {
     logan_model->file_path = NULL;
 }
 
+
+/**
+ * 读取mmap文件中的数据，并且写入到外部存储的日志文件中 
+ *
+ * path_dirs 日志文件的目录(/storage/emulated/0/Android/data/test.logan.dianping.com.logan/files/logan_v1)
+ *
+ */
 void read_mmap_data_clogan(const char *path_dirs) {
     if (buffer_type == LOGAN_MMAP_MMAP) {
         unsigned char *temp = _logan_buffer;
@@ -141,8 +151,10 @@ void read_mmap_data_clogan(const char *path_dirs) {
                     cJSON *cjson = cJSON_Parse(dir_json);
 
                     if (NULL != cjson) {
+						//version 测试机上显示的是3
                         cJSON *dir_str = cJSON_GetObjectItem(cjson,
                                                              LOGAN_VERSION_KEY);  //删除json根元素释放
+						//文件的名称，目前是时间戳命名的
                         cJSON *path_str = cJSON_GetObjectItem(cjson, LOGAN_PATH_KEY);
                         if ((NULL != dir_str && cJSON_Number == dir_str->type &&
                              CLOGAN_VERSION_NUMBER == dir_str->valuedouble) &&
@@ -153,8 +165,8 @@ void read_mmap_data_clogan(const char *path_dirs) {
                                     "read_mmapdata_clogan > dir , path and version : %s || %s || %lf\n",
                                     path_dirs, path_str->valuestring, dir_str->valuedouble);
 
-                            size_t dir_len = strlen(path_dirs);
-                            size_t path_len = strlen(path_str->valuestring);
+                            size_t dir_len = strlen(path_dirs);//日志文件的路径长度
+                            size_t path_len = strlen(path_str->valuestring);//文件名的长度
                             size_t length = dir_len + path_len + 1;
                             char file_path[length];
                             memset(file_path, 0, length);
@@ -173,8 +185,8 @@ void read_mmap_data_clogan(const char *path_dirs) {
 
 /**
  * Logan初始化
- * @param cachedirs 缓存路径
- * @param pathdirs  日志文件目录路径
+ * @param cachedirs 缓存路径，在内部/data/user目录下面
+ * @param pathdirs  日志文件目录路径,在外部存储控件
  * @param max_file  日志文件最大值
  */
 int
@@ -535,7 +547,10 @@ void clear_clogan(cLogan_model *logan_model) {
     logan_model->total_len = LOGAN_WRITEPROTOCOL_HEAER_LENGTH;
 }
 
-//对空的文件插入一行头文件做标示
+/**
+ * 向日志文件中插入协议头
+ * 对空的文件插入一行头文件做标示
+ */
 void insert_header_file_clogan(cLogan_model *loganModel) {
     char *log = "clogan header";
     int flag = 1;
@@ -548,7 +563,7 @@ void insert_header_file_clogan(cLogan_model *loganModel) {
     if (NULL == data) {
         return;
     }
-    cLogan_model temp_model; //临时的clogan_model
+    cLogan_model temp_model; //临时的clogan_model //这里为什么要有一个临时的model
     int status_header = 1;
     memset(&temp_model, 0, sizeof(cLogan_model));
     if (Z_OK != init_zlib_clogan(&temp_model)) {
@@ -579,8 +594,14 @@ void insert_header_file_clogan(cLogan_model *loganModel) {
     construct_data_delete_clogan(data);
 }
 
-//文件写入磁盘、更新文件大小
-void write_dest_clogan(void *point, size_t size, size_t length, cLogan_model *loganModel) {
+/*
+ * 文件写入磁盘、更新文件大小
+ * 
+ * point  mmap中缓存日志的起始地址
+ * size   mmap中缓存日志的大小
+ * 
+ */
+ void write_dest_clogan(void *point, size_t size, size_t length, cLogan_model *loganModel) {
     if (!is_file_exist_clogan(loganModel->file_path)) { //如果文件被删除,再创建一个文件
         if (logan_model->file_stream_type == LOGAN_FILE_OPEN) {
             fclose(logan_model->file);
