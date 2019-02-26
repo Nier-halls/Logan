@@ -61,16 +61,27 @@ int init_zlib_clogan(cLogan_model *model) {
     return ret;
 }
 
+/**
+ * 压缩加密数据，并非完全都加密，满16位的数据才做加密
+ * 
+ * data 数据的地址
+ * data_len 数据的长度
+ *
+ */
 void clogan_zlib(cLogan_model *model, char *data, int data_len, int type) {
     int is_gzip = model->is_ready_gzip;
     int ret;
     if (is_gzip) {
-        unsigned int have;
+		// >>>>>>>> gzip压缩的情况 >>>>>>>>>
+        unsigned int have; // 这个字段干什么用的
         unsigned char out[LOGAN_CHUNK];
         z_stream *strm = model->strm;
 
         strm->avail_in = (uInt) data_len;
         strm->next_in = (unsigned char *) data;
+		//压缩加密的模块，压缩后的数据分16的倍数去加密，不满16的倍数缓存着
+		//循环继续压缩判断16的倍数加密，16的倍数完全是为了加密考虑(内存压缩
+		//完成后立即加密是出于什么考虑，为了不能压缩完成以后再做加密?)
         do {
             strm->avail_out = LOGAN_CHUNK;
             strm->next_out = (unsigned char *) out;
@@ -82,45 +93,55 @@ void clogan_zlib(cLogan_model *model, char *data, int data_len, int type) {
                 model->zlib_type = LOGAN_ZLIB_END;
             } else {
                 have = LOGAN_CHUNK - strm->avail_out;
-                int total_len = model->remain_data_len + have;
+                int total_len = model->remain_data_len + have;//剩余未加密的数据
                 unsigned char *temp = NULL;
-                int handler_len = (total_len / 16) * 16;
-                int remain_len = total_len % 16;
-                if (handler_len) {
+                int handler_len = (total_len / 16) * 16;//找出16整数倍的压缩数据
+                int remain_len = total_len % 16;//找出不满16位的数据
+                if (handler_len) {//压缩的数据长度有超过16位
                     int copy_data_len = handler_len - model->remain_data_len;
                     char gzip_data[handler_len];
-                    temp = (unsigned char *) gzip_data;
+                    temp = (unsigned char *) gzip_data;//temp的大小为 剩余 + 压缩 数据和（不满16的部分会去掉）的长度
+					//把之前位处的数据拷贝到temp中
                     if (model->remain_data_len) {
                         memcpy(temp, model->remain_data, model->remain_data_len);
                         temp += model->remain_data_len;
                     }
-                    memcpy(temp, out, copy_data_len); //填充剩余数据和压缩数据
+                    memcpy(temp, out, copy_data_len); //填充剩余数据和压缩数据 //把新压缩好的数据放到temp中
+
+					//加密16的整数倍数据，说到底还是向内存缓存中写入加密数据
                     aes_encrypt_clogan((unsigned char *) gzip_data, model->last_point, handler_len,
                                        (unsigned char *) model->aes_iv); //把加密数据写入缓存
-                    model->total_len += handler_len;
+					//整理数据的大小
+					model->total_len += handler_len;
                     model->content_len += handler_len;
                     model->last_point += handler_len;
                 }
-                if (remain_len) {
+				
+                if (remain_len) {//压缩数据不超过16位的
                     if (handler_len) {
                         int copy_data_len = handler_len - model->remain_data_len;
                         temp = (unsigned char *) out;
                         temp += copy_data_len;
+						//拷贝剩余不足16位的数据
                         memcpy(model->remain_data, temp, remain_len); //填充剩余数据和压缩数据
                     } else {
+						//把剩余数据拷贝到remain_data中，感觉效果差不多
                         temp = (unsigned char *) model->remain_data;
                         temp += model->remain_data_len;
                         memcpy(temp, out, have);
                     }
                 }
+				//这个长度位除16的余数一般不满16
                 model->remain_data_len = remain_len;
             }
         } while (strm->avail_out == 0);
     } else {
+		// >>>>>>>> 非gzip压缩的情况 >>>>>>>>>
         int total_len = model->remain_data_len + data_len;
         unsigned char *temp = NULL;
         int handler_len = (total_len / 16) * 16;
         int remain_len = total_len % 16;
+		//每满16就加密
         if (handler_len) {
             int copy_data_len = handler_len - model->remain_data_len;
             char gzip_data[handler_len];
@@ -137,6 +158,7 @@ void clogan_zlib(cLogan_model *model, char *data, int data_len, int type) {
             model->content_len += handler_len;
             model->last_point += handler_len;
         }
+		//未满16的缓存在内存中
         if (remain_len) {
             if (handler_len) {
                 int copy_data_len = handler_len - model->remain_data_len;
@@ -153,12 +175,17 @@ void clogan_zlib(cLogan_model *model, char *data, int data_len, int type) {
     }
 }
 
+/**
+ * 关闭zstream，回收zlib申请的资源，计算总长度以及内容长度
+ * model->zlib_type = LOGAN_ZLIB_END;
+ * model->is_ready_gzip = 0;
+ */
 void clogan_zlib_end_compress(cLogan_model *model) {
     clogan_zlib(model, NULL, 0, Z_FINISH);
     (void) deflateEnd(model->strm);
     int val = 16 - model->remain_data_len;
     char data[16];
-    memset(data, val, 16);
+    memset(data, val, 16);//这里为什么不用0来做初始化
     if (model->remain_data_len) {
         memcpy(data, model->remain_data, model->remain_data_len);
     }
@@ -168,7 +195,7 @@ void clogan_zlib_end_compress(cLogan_model *model) {
     *(model->last_point) = LOGAN_WRITE_PROTOCOL_TAIL;
     model->last_point++;
     model->remain_data_len = 0;
-    model->total_len += 17;
+    model->total_len += 17;//难道是内容填充的16 + 结尾标志的1
     model->content_len += 16; //为了兼容之前协议content_len,只包含内容,不包含结尾符
     model->zlib_type = LOGAN_ZLIB_END;
     model->is_ready_gzip = 0;

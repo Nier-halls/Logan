@@ -36,12 +36,12 @@ static const char *ismain_key = "m";
 
 /**
  *
- * log 			"clogan header" 协议头?
- * flag 		1
- * local_time   当前系统事件
- * thread_name	"clogan"  
+ * log 			"clogan header" 协议头? //日志内容
+ * flag 		1 日志类型，顶层传递的可以自己定义没有规则需要是int类型
+ * local_time   当前系统时间
+ * thread_name	"clogan" 线程名  
  * thread_id	1   	
- * is_main		1  
+ * is_main		1  标记当前日志触发的线程
  */
 Construct_Data_cLogan * construct_json_data_clogan(char *log, int flag, long long local_time, char *thread_name,
                            long long thread_id, int is_main) {
@@ -66,7 +66,7 @@ Construct_Data_cLogan * construct_json_data_clogan(char *log, int flag, long lon
                 memset(construct_data, 0, sizeof(Construct_Data_cLogan));
                 size_t str_len = strlen(back_data);// 头文件（json格式的）String字符串长度
                 size_t length = str_len + 1;// 头文件数据的长度，但是这里为什么要+1？ >>>>>>>  >>>添加\n字符
-                unsigned char *temp_data = (unsigned char *) malloc(length);// 为什么要重新申请一段内存，直接用back_data对应的地址不行吗？难道这段内存会在delete的时候被回收？
+                unsigned char *temp_data = (unsigned char *) malloc(length);// 为什么要重新申请一段内存，直接用back_data对应的地址不行吗？难道这段内存会在cJSON_Delete的时候被回收？
                 if (NULL != temp_data) {
                     unsigned char *temp_point = temp_data;// 为什么要声明两个指针？直接用temp_data指针来进行copy JSON字符串不就好了。
                     memset(temp_point, 0, length);

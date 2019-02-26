@@ -173,6 +173,7 @@ void read_mmap_data_clogan(const char *path_dirs) {
                             memcpy(file_path, path_dirs, dir_len);
                             strcat(file_path, path_str->valuestring);
                             temp++;
+							//temp目前指向的是header过后的数据，file_path为文件路径
                             write_mmap_data_clogan(file_path, temp);
                         }
                         cJSON_Delete(cjson);
@@ -217,7 +218,7 @@ clogan_init(const char *cache_dirs, const char *path_dirs, int max_file, const c
     }
 
     aes_init_key_iv(encrypt_key16, encrypt_iv16);
-
+	//创建mmap缓存目录以及缓存日志文件--start
     size_t path1 = strlen(cache_dirs);
     size_t path2 = strlen(LOGAN_CACHE_DIR);
     size_t path3 = strlen(LOGAN_CACHE_FILE);
@@ -276,10 +277,16 @@ clogan_init(const char *cache_dirs, const char *path_dirs, int max_file, const c
     if (isAddDivede)
         strcat(dirs, LOGAN_DIVIDE_SYMBOL);
     makedir_clogan(_dir_path); //创建缓存目录,如果初始化失败,注意释放_dir_path
-
+	//创建mmap缓存目录以及缓存日志文件--end
+	
     int flag = LOGAN_MMAP_FAIL;
     if (NULL == _logan_buffer) {
         if (NULL == _cache_buffer_buffer) {
+            /**
+             * cache_path: mmap文件地址
+             * _logan_buffer: 指向mmap内存映射的地址指针，会被方法赋值
+             * _cache_buffer_buffer: 内存缓存的地址指针，会在内部创建一个150kb的内存缓存
+             */
             flag = open_mmap_file_clogan(cache_path, &_logan_buffer, &_cache_buffer_buffer);
         } else {
             flag = LOGAN_MMAP_MEMORY;
@@ -317,6 +324,7 @@ clogan_init(const char *cache_dirs, const char *path_dirs, int max_file, const c
         }
         if (flag == LOGAN_MMAP_MMAP) //MMAP的缓存模式,从缓存的MMAP中读取数据
             //mmap文件刚刚映射好，里面都是用空数据填充的为什么还要取读一次？
+            //在mmap文件中有数据的情况下是不会去用空字符来填充的，这个时候就要去尝试去读取一次
             read_mmap_data_clogan(_dir_path);
         printf_clogan("clogan_init > logan init success\n");
     } else {
@@ -364,7 +372,8 @@ void restore_last_position_clogan(cLogan_model *model) {
     *temp = LOGAN_WRITE_PROTOCOL_HEADER;
     model->total_len++;
     temp++;
-    model->content_lent_point = temp; // 内容的指针地址
+    model->content_lent_point = temp; // 除去开头Head标志符的数据地址，也就是java层content长度的指针，估计是到时候为了修改
+    //计算并且写入数据体的长度 START （高位在前）
     *temp = model->content_len >> 24;
     model->total_len++;
     temp++;
@@ -374,7 +383,8 @@ void restore_last_position_clogan(cLogan_model *model) {
     *temp = model->content_len >> 8;
     model->total_len++;
     temp++;
-    *temp = model->content_len;
+    *temp = model->content_len >> 0;
+	//计算并且写入数据体的长度 END
     model->total_len++;
     temp++;
     model->last_point = temp;
@@ -572,15 +582,20 @@ void insert_header_file_clogan(cLogan_model *loganModel) {
 
     if (status_header) {
         init_encrypt_key_clogan(&temp_model);
-        int length = data->data_len * 10;
+        int length = data->data_len * 10;// 这里为什么要乘以10
         unsigned char temp_memory[length];
         memset(temp_memory, 0, length);
         temp_model.total_len = 0;
         temp_model.last_point = temp_memory;
+		//数据内存缓存（是头文件json字符传的10倍大小）
+		//初始换内存 head_tag[1] + content_length[4] last_point指向content_length之后 
         restore_last_position_clogan(&temp_model);
+		//压缩加密数据
         clogan_zlib_compress(&temp_model, data->data, data->data_len);
-        clogan_zlib_end_compress(&temp_model);
-        update_length_clogan(&temp_model);
+		//资源回收
+		clogan_zlib_end_compress(&temp_model);
+		//更新数据长度
+		update_length_clogan(&temp_model);
 
         fwrite(temp_memory, sizeof(char), temp_model.total_len, loganModel->file);//写入到文件中
         fflush(logan_model->file);
@@ -597,9 +612,10 @@ void insert_header_file_clogan(cLogan_model *loganModel) {
 /*
  * 文件写入磁盘、更新文件大小
  * 
- * point  mmap中缓存日志的起始地址
- * size   mmap中缓存日志的大小
- * 
+ * point  mmap中缓存日志的起始地址（包含日志文件的长度信息，占3位）
+ * size   一个char的大小，应该是1字节
+ * length mmap中缓存日志的大小 
+ *
  */
  void write_dest_clogan(void *point, size_t size, size_t length, cLogan_model *loganModel) {
     if (!is_file_exist_clogan(loganModel->file_path)) { //如果文件被删除,再创建一个文件
@@ -639,7 +655,8 @@ void write_flush_clogan() {
 
 void clogan_write2(char *data, int length) {
     if (NULL != logan_model && logan_model->is_ok) {
-        clogan_zlib_compress(logan_model, data, length);
+		//压缩加密
+		clogan_zlib_compress(logan_model, data, length);
         update_length_clogan(logan_model); //有数据操作,要更新数据长度到缓存中
         int is_gzip_end = 0;
 
@@ -650,11 +667,13 @@ void clogan_write2(char *data, int length) {
             update_length_clogan(logan_model);
         }
 
+
+		//什么时候向mmap文件中写入数据
         int isWrite = 0;
         if (!logan_model->file_len && is_gzip_end) { //如果是个空文件、第一条日志写入
             isWrite = 1;
             printf_clogan("clogan_write2 > write type empty file \n");
-        } else if (buffer_type == LOGAN_MMAP_MEMORY && is_gzip_end) { //直接写入文件
+        } else if (buffer_type == LOGAN_MMAP_MEMORY && is_gzip_end) { //如果是内存缓存直接写入文件
             isWrite = 1;
             printf_clogan("clogan_write2 > write type memory \n");
         } else if (buffer_type == LOGAN_MMAP_MMAP &&
@@ -675,7 +694,9 @@ void clogan_write2(char *data, int length) {
     }
 }
 
-//如果数据流非常大,切割数据,分片写入
+//如果数据流非常大,切割数据,分片写入 
+//按照这边的逻辑来看基本都会去做分片写入数据的操作
+//分片操作有什么优势吗，一次性写入和分开写入会有性能上的差异吗？
 void clogan_write_section(char *data, int length) {
     int size = LOGAN_WRITE_SECTION;
     int times = length / size;
@@ -760,6 +781,7 @@ clogan_write(int flag, char *log, long long local_time, char *thread_name, long 
         }
     }
 
+	//组装一个json格式的日志数据体
     Construct_Data_cLogan *data = construct_json_data_clogan(log, flag, local_time, thread_name,
                                                              thread_id, is_main);
     if (NULL != data) {
