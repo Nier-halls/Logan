@@ -109,11 +109,11 @@ public class MainActivity extends Activity {
             public void run() {
                 super.run();
                 try {
-                    for (int i = 0; i < 9; i++) {
-                        Log.d(TAG, "times : " + i);
-                        Logan.w(String.valueOf(i), 1);
+//                    for (int i = 0; i < 9; i++) {
+//                        Log.d(TAG, "times : " + i);
+                        Logan.w("test >>>> logan", 1);
                         Thread.sleep(5);
-                    }
+//                    }
                     Log.d(TAG, "write log end");
                 } catch (InterruptedException e) {
                     e.printStackTrace();

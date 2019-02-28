@@ -38,7 +38,7 @@ static int is_open_ok = 0;
 
 static unsigned char *_logan_buffer = NULL; //缓存Buffer (不释放) //mmap内存映射的内存地址指针，指向mmap文件内存映射。如果mmap失败则会指向一块内存缓存的地址
 
-static char *_dir_path = NULL; //日志目录路径 (不释放) 在外部存储./storage/Android
+static char *_dir_path = NULL; //日志目录路径 (不释放) 在外部存储./storage/Android  //这个字段后面是否跟着‘/’的？
 
 static char *_mmap_file_path = NULL; //mmap文件路径 (不释放)
 
@@ -54,13 +54,17 @@ static cLogan_model *logan_model = NULL; //(不释放)
 
 /**
  * 打开日志文件的目录，并且记录当前日志文件的情况，已经写入的大小等
+ *    logan_model->file = file_temp; //持有FILE结构体，到时候需要手动关闭
+ *    logan_model->file_len = longBytes; //记录打开文件当前的长度
+ *    logan_model->file_stream_type = LOGAN_FILE_OPEN; //标记当前文件的状态
  */
 int init_file_clogan(cLogan_model *logan_model) {
     int is_ok = 0;
     if (LOGAN_FILE_OPEN == logan_model->file_stream_type) {
         return 1;
     } else {
-        FILE *file_temp = fopen(logan_model->file_path, "ab+");
+    	//创建文件
+        FILE *file_temp = fopen(logan_model->file_path, "ab+");//fopen 以附加的方式打开只写文件。若文件不存在，则会建立该文件，如果文件存在，写入的数据会被加到文件尾，即文件原先的内容会被保留。（EOF符保留）
         if (NULL != file_temp) {  //初始化文件流开启
             logan_model->file = file_temp;
             fseek(file_temp, 0, SEEK_END);
@@ -153,7 +157,7 @@ void read_mmap_data_clogan(const char *path_dirs) {
                     if (NULL != cjson) {
 						//version 测试机上显示的是3
                         cJSON *dir_str = cJSON_GetObjectItem(cjson,
-                                                             LOGAN_VERSION_KEY);  //删除json根元素释放
+                                                             LOGAN_VERSION_KEY);  //删除json根元素释放 //什么意思?
 						//文件的名称，目前是时间戳命名的
                         cJSON *path_str = cJSON_GetObjectItem(cjson, LOGAN_PATH_KEY);
                         if ((NULL != dir_str && cJSON_Number == dir_str->type &&
@@ -186,8 +190,8 @@ void read_mmap_data_clogan(const char *path_dirs) {
 
 /**
  * Logan初始化
- * @param cachedirs 缓存路径，在内部/data/user目录下面
- * @param pathdirs  日志文件目录路径,在外部存储控件
+ * @param cachedirs 缓存路径，在内部/data/user目录下面(/data/user/0/test.logan.dianping.com.logan/files)
+ * @param pathdirs  日志文件目录路径,在外部存储控件(/storage/emulated/0/Android/data/test.logan.dianping.com.logan/files/logan_v1)
  * @param max_file  日志文件最大值
  */
 int
@@ -217,8 +221,11 @@ clogan_init(const char *cache_dirs, const char *path_dirs, int max_file, const c
         _mmap_file_path = NULL;
     }
 
+	//赋值一下aes需要的密钥key 以及 偏移量
     aes_init_key_iv(encrypt_key16, encrypt_iv16);
-	//创建mmap缓存目录以及缓存日志文件--start
+
+	
+	//>>>>>>>>>>>>> 创建mmap缓存目录 START >>>>>>>>>>>>> 
     size_t path1 = strlen(cache_dirs);
     size_t path2 = strlen(LOGAN_CACHE_DIR);
     size_t path3 = strlen(LOGAN_CACHE_FILE);
@@ -248,11 +255,16 @@ clogan_init(const char *cache_dirs, const char *path_dirs, int max_file, const c
 
     strcat(cache_path, LOGAN_CACHE_DIR);
     strcat(cache_path, LOGAN_DIVIDE_SYMBOL);
-
-    makedir_clogan(cache_path); //创建保存mmap文件的目录
+	
+	 //创建保存mmap文件的目录（文件还没有创建）
+    makedir_clogan(cache_path);
 
     strcat(cache_path, LOGAN_CACHE_FILE);
 
+	//<<<<<<<<<<<<< 创建mmap缓存目录 END <<<<<<<<<<<<<
+
+
+	//>>>>>>>>>>>>> 创建日志缓存目录 START >>>>>>>>>>>>> 
     size_t dirLength = strlen(path_dirs);
 
     isAddDivede = 0;
@@ -276,9 +288,11 @@ clogan_init(const char *cache_dirs, const char *path_dirs, int max_file, const c
     memcpy(dirs, path_dirs, dirLength);
     if (isAddDivede)
         strcat(dirs, LOGAN_DIVIDE_SYMBOL);
-    makedir_clogan(_dir_path); //创建缓存目录,如果初始化失败,注意释放_dir_path
-	//创建mmap缓存目录以及缓存日志文件--end
 	
+    makedir_clogan(_dir_path); //创建缓存目录,如果初始化失败,注意释放_dir_path
+	//<<<<<<<<<<<<< 创建日志缓存目录 END <<<<<<<<<<<<<
+
+	// 打开mmap内存映射并且保存内存映射的地址到_logan_buffer 
     int flag = LOGAN_MMAP_FAIL;
     if (NULL == _logan_buffer) {
         if (NULL == _cache_buffer_buffer) {
@@ -287,7 +301,7 @@ clogan_init(const char *cache_dirs, const char *path_dirs, int max_file, const c
              * _logan_buffer: 指向mmap内存映射的地址指针，会被方法赋值
              * _cache_buffer_buffer: 内存缓存的地址指针，会在内部创建一个150kb的内存缓存
              */
-            flag = open_mmap_file_clogan(cache_path, &_logan_buffer, &_cache_buffer_buffer);
+            flag = open_mmap_file_clogan(cache_path, &_logan_buffer, &_cache_buffer_buffer);//_cache_buffer_buffer这个东西有什么用
         } else {
             flag = LOGAN_MMAP_MEMORY;
         }
@@ -311,6 +325,7 @@ clogan_init(const char *cache_dirs, const char *path_dirs, int max_file, const c
     }
 
     if (is_init_ok) {
+		//创建日志处理结构体
         if (NULL == logan_model) {
             logan_model = malloc(sizeof(cLogan_model));
             if (NULL != logan_model) { //堆非空判断 , 如果为null , 就失败
@@ -325,6 +340,8 @@ clogan_init(const char *cache_dirs, const char *path_dirs, int max_file, const c
         if (flag == LOGAN_MMAP_MMAP) //MMAP的缓存模式,从缓存的MMAP中读取数据
             //mmap文件刚刚映射好，里面都是用空数据填充的为什么还要取读一次？
             //在mmap文件中有数据的情况下是不会去用空字符来填充的，这个时候就要去尝试去读取一次
+
+		    //尝试把之前没有被缓存到
             read_mmap_data_clogan(_dir_path);
         printf_clogan("clogan_init > logan init success\n");
     } else {
@@ -361,7 +378,7 @@ void add_mmap_header_clogan(char *content, cLogan_model *model) {
     *temp = LOGAN_MMAP_TAIL_PROTOCOL;
     temp++;
     model->total_point = (unsigned char *) temp; // 总数据的total_length的指针位置
-    model->total_len = 0;
+    model->total_len = 0;//避免之前有脏数据没有覆盖完全
 }
 
 /**
@@ -392,6 +409,12 @@ void restore_last_position_clogan(cLogan_model *model) {
     printf_clogan("restore_last_position_clogan > content_len : %d\n", model->content_len);
 }
 
+/**
+ * 这个方法有什么作用
+ *
+ * pathname 日志文件的文件名
+ *
+ */
 int clogan_open(const char *pathname) {
     int back = CLOGAN_OPEN_FAIL_NOINIT;
     if (!is_init_ok) {
@@ -400,6 +423,7 @@ int clogan_open(const char *pathname) {
     }
 
     is_open_ok = 0;
+	//path name 128 是什么情况 127个char?
     if (NULL == pathname || 0 == strnlen(pathname, 128) || NULL == _logan_buffer ||
         NULL == _dir_path ||
         0 == strnlen(_dir_path, 128)) {
@@ -407,8 +431,11 @@ int clogan_open(const char *pathname) {
         return back;
     }
 
+	//>>>>>>>>>> 将可能的缓存写入到文件 并且重置logan_model >>>>>>>>>>
+	
     if (NULL != logan_model) { //回写到日志中
-        if (logan_model->total_len > LOGAN_WRITEPROTOCOL_HEAER_LENGTH) {
+    	//在已经init的情况下，但是时间发生了改变，这个时候就需要先把可能的缓存全部写入到文件中
+        if (logan_model->total_len > LOGAN_WRITEPROTOCOL_HEAER_LENGTH) {// head(1) + length(3) + tail(1)
             clogan_flush();
         }
         if (logan_model->file_stream_type == LOGAN_FILE_OPEN) {
@@ -431,7 +458,10 @@ int clogan_open(const char *pathname) {
             return back;
         }
     }
-    char *temp = NULL;
+	
+	//>>>>>>>>>> 将可能的缓存写入到文件 并且重置logan_model >>>>>>>>>>
+
+    char *temp = NULL;//将指向新文件的path 字符串地址
 
     size_t file_path_len = strlen(_dir_path) + strlen(pathname) + 1;
     char *temp_file = malloc(file_path_len); // 日志文件路径
@@ -442,13 +472,13 @@ int clogan_open(const char *pathname) {
         temp += strlen(_dir_path);
         memcpy(temp, pathname, strlen(pathname)); //创建文件路径
         logan_model->file_path = temp_file;
-
+		//创建日志文件
         if (!init_file_clogan(logan_model)) {  //初始化文件IO和文件大小
             is_open_ok = 0;
             back = CLOGAN_OPEN_FAIL_IO;
             return back;
         }
-
+		//配置 zstream 调用 deflateInit2 来初始化
         if (init_zlib_clogan(logan_model) != Z_OK) { //初始化zlib压缩
             is_open_ok = 0;
             back = CLOGAN_OPEN_FAIL_ZLIB;
@@ -482,8 +512,8 @@ int clogan_open(const char *pathname) {
                 logan_model->total_point = _logan_buffer;
                 logan_model->total_len = 0;
             }
-
-            logan_model->last_point = logan_model->total_point + LOGAN_MMAP_TOTALLEN;
+			//到目前为止total_point指向mmap文件头的末尾，total_len=0
+            logan_model->last_point = logan_model->total_point + LOGAN_MMAP_TOTALLEN;//这里为什么还有+3？预先跳过3位标识长度的字节？不应该跳或者说跳的不是长度字节，后面还要重新去读取的//确实是预留位
 
             if (NULL != map) {
                 delete_json_map_clogan(map);
@@ -561,7 +591,8 @@ void clear_clogan(cLogan_model *logan_model) {
  * 向日志文件中插入协议头
  * 对空的文件插入一行头文件做标示
  */
-void insert_header_file_clogan(cLogan_model *loganModel) {
+void 
+(cLogan_model *loganModel) {
     char *log = "clogan header";
     int flag = 1;
     long long local_time = get_system_current_clogan();
@@ -646,7 +677,7 @@ void write_flush_clogan() {
     }
     if (logan_model->total_len > LOGAN_WRITEPROTOCOL_HEAER_LENGTH) {
         unsigned char *point = logan_model->total_point;
-        point += LOGAN_MMAP_TOTALLEN;
+        point += LOGAN_MMAP_TOTALLEN;//前三位记录长度
         write_dest_clogan(point, sizeof(char), logan_model->total_len, logan_model);
         printf_clogan("write_flush_clogan > logan total len : %d \n", logan_model->total_len);
         clear_clogan(logan_model);
@@ -661,7 +692,7 @@ void clogan_write2(char *data, int length) {
         int is_gzip_end = 0;
 
         if (!logan_model->file_len ||
-            logan_model->content_len >= LOGAN_MAX_GZIP_UTIL) { //是否一个压缩单元结束
+            logan_model->content_len >= LOGAN_MAX_GZIP_UTIL) { //是否一个压缩单元结束//压缩单元有什么意义吗？//20K压缩到5k？或者40k压缩到5k？压缩完成的超过5k就准备写入
             clogan_zlib_end_compress(logan_model);
             is_gzip_end = 1;
             update_length_clogan(logan_model);

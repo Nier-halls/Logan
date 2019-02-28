@@ -43,8 +43,14 @@ int init_zlib_clogan(cLogan_model *model) {
         temp_zlib->zalloc = Z_NULL;
         temp_zlib->zfree = Z_NULL;
         temp_zlib->opaque = Z_NULL;
-        ret = deflateInit2(temp_zlib, Z_BEST_COMPRESSION, Z_DEFLATED, (15 + 16), 8,
-                           Z_DEFAULT_STRATEGY);
+        ret = deflateInit2(
+			temp_zlib, //z_stream
+			Z_BEST_COMPRESSION, // gives best compression压缩模式
+			Z_DEFLATED, // It must be Z_DEFLATED in this version of the library 写死的不用管
+			(15 + 16), //不知道干啥用的 默认15，16会加上与i个header
+			8,//默认值表明会使用较大的内存来提高速度
+            Z_DEFAULT_STRATEGY//压缩算法，影响加密比率
+            );
         if (ret == Z_OK) {
             model->is_ready_gzip = 1;
             model->zlib_type = LOGAN_ZLIB_INIT;
@@ -71,7 +77,8 @@ int init_zlib_clogan(cLogan_model *model) {
 void clogan_zlib(cLogan_model *model, char *data, int data_len, int type) {
     int is_gzip = model->is_ready_gzip;
     int ret;
-    if (is_gzip) {
+	//测试强行不做GZIP压缩 fgd
+    if (is_gzip && 0    ) {
 		// >>>>>>>> gzip压缩的情况 >>>>>>>>>
         unsigned int have; // 这个字段干什么用的
         unsigned char out[LOGAN_CHUNK];
@@ -95,7 +102,7 @@ void clogan_zlib(cLogan_model *model, char *data, int data_len, int type) {
                 have = LOGAN_CHUNK - strm->avail_out;
                 int total_len = model->remain_data_len + have;//剩余未加密的数据
                 unsigned char *temp = NULL;
-                int handler_len = (total_len / 16) * 16;//找出16整数倍的压缩数据
+                int handler_len = (total_len / 16) * 16;//找出16整数倍的压缩数据，也就是需要加密的数据块，包含以前剩余的和新压缩好的
                 int remain_len = total_len % 16;//找出不满16位的数据
                 if (handler_len) {//压缩的数据长度有超过16位
                     int copy_data_len = handler_len - model->remain_data_len;
@@ -145,15 +152,19 @@ void clogan_zlib(cLogan_model *model, char *data, int data_len, int type) {
         if (handler_len) {
             int copy_data_len = handler_len - model->remain_data_len;
             char gzip_data[handler_len];
-            temp = (unsigned char *) gzip_data;
+            temp = (unsigned char *) gzip_data; //这里的temp是不是没有什么用???
             if (model->remain_data_len) {
                 memcpy(temp, model->remain_data, model->remain_data_len);
                 temp += model->remain_data_len;
             }
             memcpy(temp, data, copy_data_len); //填充剩余数据和压缩数据
 
-            aes_encrypt_clogan((unsigned char *) gzip_data, model->last_point, handler_len,
-                               (unsigned char *) model->aes_iv);
+            //aes_encrypt_clogan((unsigned char *) gzip_data, model->last_point, handler_len,
+            //                  (unsigned char *) model->aes_iv);
+
+			//测试不做加密处理fgd
+			memcpy(model->last_point, gzip_data, handler_len);
+			
             model->total_len += handler_len;
             model->content_len += handler_len;
             model->last_point += handler_len;
@@ -183,7 +194,7 @@ void clogan_zlib(cLogan_model *model, char *data, int data_len, int type) {
 void clogan_zlib_end_compress(cLogan_model *model) {
     clogan_zlib(model, NULL, 0, Z_FINISH);
     (void) deflateEnd(model->strm);
-    int val = 16 - model->remain_data_len;
+    int val = 16 - model->remain_data_len;//这一步是什么意思
     char data[16];
     memset(data, val, 16);//这里为什么不用0来做初始化
     if (model->remain_data_len) {
@@ -191,6 +202,8 @@ void clogan_zlib_end_compress(cLogan_model *model) {
     }
     aes_encrypt_clogan((unsigned char *) data, model->last_point, 16,
                        (unsigned char *) model->aes_iv); //把加密数据写入缓存
+	//上面操作都是把未加密剩余不满16位的加密填满
+					   
     model->last_point += 16;
     *(model->last_point) = LOGAN_WRITE_PROTOCOL_TAIL;
     model->last_point++;
