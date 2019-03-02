@@ -284,6 +284,7 @@ class LoganThread extends Thread {
         if (isFile(action.date)) { //是否有日期文件
             String src = mPath + File.separator + action.date;
             if (action.date.equals(String.valueOf(Util.getCurrentTime()))) {
+                //这里为什么要copy一次，是怕一边写入 一边发送吗？
                 doFlushLog2File();
                 String des = mPath + File.separator + action.date + ".copy";
                 if (copyFile(src, des)) {

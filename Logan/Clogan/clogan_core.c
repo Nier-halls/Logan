@@ -459,7 +459,7 @@ int clogan_open(const char *pathname) {
         }
     }
 	
-	//>>>>>>>>>> 将可能的缓存写入到文件 并且重置logan_model >>>>>>>>>>
+	//<<<<<<<<<< 将可能的缓存写入到文件 并且重置logan_model <<<<<<<<<<
 
     char *temp = NULL;//将指向新文件的path 字符串地址
 
@@ -591,8 +591,7 @@ void clear_clogan(cLogan_model *logan_model) {
  * 向日志文件中插入协议头
  * 对空的文件插入一行头文件做标示
  */
-void 
-(cLogan_model *loganModel) {
+void insert_header_file_clogan(cLogan_model *loganModel) {
     char *log = "clogan header";
     int flag = 1;
     long long local_time = get_system_current_clogan();

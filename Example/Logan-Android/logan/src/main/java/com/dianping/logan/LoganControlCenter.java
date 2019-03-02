@@ -96,12 +96,12 @@ class LoganControlCenter {
         if (Looper.getMainLooper() == Looper.myLooper()) {
             isMain = true;
         }
-        action.log = log;
-        action.localTime = System.currentTimeMillis();
-        action.flag = flag;
-        action.isMainThread = isMain;
-        action.threadId = threadLog;
-        action.threadName = threadName;
+        action.log = log;//c
+        action.localTime = System.currentTimeMillis();//l
+        action.flag = flag;//f
+        action.isMainThread = isMain;//m
+        action.threadId = threadLog;//i
+        action.threadName = threadName;//n
         model.writeAction = action;
         if (mCacheLogQueue.size() < mMaxQueue) {
             mCacheLogQueue.add(model);
